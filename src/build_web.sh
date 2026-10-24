@@ -54,18 +54,26 @@ echo "  emcc: $(emcc --version | head -1)"
 # restored when this script exits, including on failure.
 ODIN_PATH=$(odin root)
 OS_DIR="$ODIN_PATH/core/os"
+RT_DIR="$ODIN_PATH/base/runtime"
 OS_BACKUP=$(mktemp -d)
-OS_FILES="wasm.odin file_js.odin dir_js.odin stat_js.odin"
+OS_FILES="wasm.odin file_js.odin dir_js.odin stat_js.odin heap_js.odin"
 for f in $OS_FILES; do
 	cp "$OS_DIR/$f" "$OS_BACKUP/$f"
 	cp "web/odin_os/$f" "$OS_DIR/$f"
 done
+# The default wasm allocator grows memory itself. Point it at emscripten's
+# malloc for this compile, and remove the added file afterwards.
+cp "$RT_DIR/default_allocators_general.odin" "$OS_BACKUP/default_allocators_general.odin"
+cp "web/odin_runtime/default_allocators_general.odin" "$RT_DIR/default_allocators_general.odin"
+cp "web/odin_runtime/emscripten_heap.odin" "$RT_DIR/emscripten_heap.odin"
 FS=$(mktemp -d)
 cleanup() {
 	rm -rf "$FS"
 	for f in $OS_FILES; do
 		cp "$OS_BACKUP/$f" "$OS_DIR/$f"
 	done
+	cp "$OS_BACKUP/default_allocators_general.odin" "$RT_DIR/default_allocators_general.odin"
+	rm -f "$RT_DIR/emscripten_heap.odin"
 	rm -rf "$OS_BACKUP"
 }
 trap cleanup EXIT
@@ -99,7 +107,7 @@ files="$files $ODIN_PATH/vendor/raylib/wasm/libraygui.a"
 #  -sASSERTIONS: helpful error messages
 #  -sALLOW_MEMORY_GROWTH=1: let memory grow past the initial heap
 #  -sINITIAL_MEMORY=512MB: the packed data is copied into this heap
-#  -sSTACK_SIZE=2MB: larger stack for nested calls
+#  -sSTACK_SIZE=16MB: JSON records and the startup walk exceed 2MB
 #  --shell-file: use our HTML template
 #  --preload-file: bundle assets and plugin content into the build
 flags="-sEXPORTED_RUNTIME_METHODS=['HEAPF32']"
@@ -112,7 +120,9 @@ flags="$flags -sASSERTIONS"
 # wasm page size.
 flags="$flags -sALLOW_MEMORY_GROWTH=1"
 flags="$flags -sINITIAL_MEMORY=536870912"  # 512MB
-flags="$flags -sSTACK_SIZE=2097152"        # 2MB
+# JSON files and the startup walk need more than the 2 MB default.
+# The largest unit record is ~230 KB and the parser is recursive.
+flags="$flags -sSTACK_SIZE=16777216"       # 16MB
 flags="$flags --shell-file game_web/index_template.html"
 
 # Stage the virtual filesystem outside the output directory, so the copy is

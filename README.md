@@ -182,14 +182,20 @@ python3 -m http.server 8000
 - Recovered Levels is not packed into the web build
 - The first launch downloads the packed data (on the order of 180 MB) before the menu appears
 - A browser may stay silent until the page has been clicked
+- Realtime Lighting's shader does not compile under WebGL 1, so that pass does not draw. The level still does
 
 ### GitHub Pages test
 
-`.github/workflows/web-build.yml` builds the browser game. A push of a
-`cursor/web-*` branch, or a manual run of that workflow, publishes the
-result to GitHub Pages.
+`.github/workflows/web-build.yml` builds the browser game on a pull
+request and on a push of a `cursor/web-*` branch. A push also publishes
+to GitHub Pages once the repository has a Pages site.
 
-Pages must be set to deploy from **GitHub Actions** (Settings → Pages).
+The Actions token cannot create that site. Set it once: Settings →
+Pages → Build and deployment → Source → **GitHub Actions**. Until then
+the deploy job warns and the workflow stays green; the build is still
+uploaded as the `deimos-web` artifact. The next push publishes after
+the setting exists.
+
 The game then replaces the whole Pages site — the documentation site
 included — until that site's own workflow deploys again. For this
 repository the test URL is

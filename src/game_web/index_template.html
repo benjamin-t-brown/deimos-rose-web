@@ -162,8 +162,11 @@
 				// race condition. `canvas` doesn't have its correct size yet.
 				send_resize();
 
-				// Hide loading screen
+				// Hide the loading screen and the footer link. The link would sit
+				// on top of the play field.
 				loadingDiv.style.display = 'none';
+				var info = document.querySelector('.info');
+				if (info) info.style.display = 'none';
 
 				// Runs the "main loop".
 				function do_main_update() {

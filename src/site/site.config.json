@@ -54,8 +54,9 @@
       "pr": 1,
       "summary": "The game builds to WebAssembly and can be published to GitHub Pages for a test. Netplay is not in that build, and progress, preferences and high scores last only for the browser session.",
       "highlights": [
-        "A push of a web branch publishes the build to GitHub Pages, replacing the documentation site until that site is deployed again.",
-        "The original twelve sectors are included. Recovered Levels is not, to keep the download smaller."
+        "A push of a web branch publishes the build to GitHub Pages once Pages is set to GitHub Actions. That replaces the documentation site until that site is deployed again.",
+        "The original twelve sectors are included. Recovered Levels is not, to keep the download smaller.",
+        "In a browser the game opens on the main menu and a level can be started. Realtime Lighting's shader does not compile under WebGL 1."
       ]
     },
     {

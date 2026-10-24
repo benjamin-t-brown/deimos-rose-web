@@ -1,7 +1,7 @@
 name: Web Build
 
 # Builds the browser game and, on a push of a cursor/web-* branch (or a
-# manual run), publishes it to GitHub Pages.
+# manual run), publishes it to GitHub Pages when a Pages site exists.
 #
 # That publication replaces the whole Pages site. The documentation site
 # (.github/workflows/site.yml) deploys to the same place after Build
@@ -9,8 +9,11 @@ name: Web Build
 # workflow is the test deploy of the game.
 #
 # Pages has to be set to "GitHub Actions" in the repository settings
-# (Settings → Pages → Build and deployment → Source). The published site
-# must stay under 1 GB (docs.github.com/pages/getting-started-with-github-pages/github-pages-limits).
+# (Settings → Pages → Build and deployment → Source). The Actions token
+# cannot create that site, so until it exists the deploy job warns and
+# succeeds; the build is still uploaded as the deimos-web artifact. The
+# published site must stay under 1 GB
+# (docs.github.com/pages/getting-started-with-github-pages/github-pages-limits).
 
 on:
   push:
@@ -101,6 +104,27 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # Creating a Pages site is an administration call, which GITHUB_TOKEN
+      # is not allowed to make. A 404 here means the owner has not set
+      # Source to GitHub Actions yet. The artifact from build-web is enough
+      # until they do; the next push publishes.
+      - name: See whether Pages is enabled
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          gh api "repos/${{ github.repository }}/pages" --jq .html_url
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=GitHub Pages is not enabled::Settings → Pages → Build and deployment → Source → GitHub Actions. The web build is uploaded as the deimos-web artifact. The next push of this branch publishes it once that setting exists."
+          fi
       - uses: actions/configure-pages@v5
+        if: steps.pages.outputs.enabled == 'true'
       - id: deployment
+        if: steps.pages.outputs.enabled == 'true'
         uses: actions/deploy-pages@v4
