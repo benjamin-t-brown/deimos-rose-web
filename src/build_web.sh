@@ -77,11 +77,11 @@ files="$files $ODIN_PATH/vendor/raylib/wasm/libraygui.a"
 #  -sWASM_BIGINT: enable BigInt support
 #  -sWARN_ON_UNDEFINED_SYMBOLS=0: some Odin symbols stay undefined
 #  -sASSERTIONS: helpful error messages
-#  -sALLOW_MEMORY_GROWTH=1: let memory grow as needed
-#  -sINITIAL_MEMORY=256MB: start with enough memory for the game
+#  -sALLOW_MEMORY_GROWTH=1: let memory grow past the initial heap
+#  -sINITIAL_MEMORY=512MB: the packed data is copied into this heap
 #  -sSTACK_SIZE=2MB: larger stack for nested calls
 #  --shell-file: use our HTML template
-#  --preload-file: bundle assets into the build
+#  --preload-file: bundle assets and plugin content into the build
 flags="-sEXPORTED_RUNTIME_METHODS=['HEAPF32']"
 flags="$flags -sUSE_GLFW=3"
 flags="$flags -sWASM_BIGINT"
