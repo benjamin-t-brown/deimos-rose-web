@@ -47,6 +47,18 @@
 
   "changes": [
     {
+      "id": "web-saves",
+      "title": "Saves stick in the browser",
+      "date": "2026-10-24",
+      "kind": "feature",
+      "pr": 4,
+      "summary": "Progress, preferences and high scores in the browser build survive a reload. On Extras, Download Save writes that save as one file and Upload Save restores it.",
+      "highlights": [
+        "The file is named deimos-rose-save.drsave. A file that is not a save is refused, and the current save is left as it was.",
+        "Desktop builds keep the same save files they already use."
+      ]
+    },
+    {
       "id": "pages-game",
       "title": "The website is the game",
       "date": "2026-10-24",

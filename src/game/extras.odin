@@ -85,6 +85,10 @@ setting_set :: proc(ps: ^Prefs_State, id: prefs.Setting_ID, v: int) {
 @(private = "file") EXTRAS_ROW0_Y :: 90
 @(private = "file") EXTRAS_ROW :: 44
 @(private = "file") EXTRAS_ROWS_SHOWN :: 7
+// The two save buttons take the row pitches under the settings that fit,
+// still inside the seven the note was spaced under. A longer list scrolls
+// in the rows above them.
+@(private = "file") EXTRAS_SAVE_BUTTONS :: 2
 @(private = "file") EXTRAS_LABEL_X :: 110
 @(private = "file") EXTRAS_VALUE_X :: 350 // centre of a toggle; a slider spans either side
 @(private = "file") EXTRAS_SLIDER_W :: 150
@@ -93,11 +97,29 @@ setting_set :: proc(ps: ^Prefs_State, id: prefs.Setting_ID, v: int) {
 @(private = "file") EXTRAS_NOTE_Y :: 404
 @(private = "file") EXTRAS_RESET_X :: 510
 
+// How many setting rows the page shows. On web the save buttons keep two
+// pitches, so five settings fit before the list scrolls; a shorter list
+// leaves the buttons on the next pitches under the last row.
+@(private = "file")
+extras_rows_shown :: proc(listed: int) -> int {
+	room := EXTRAS_ROWS_SHOWN
+	when ODIN_OS == .JS {
+		room -= EXTRAS_SAVE_BUTTONS
+	}
+	if listed < room {
+		return listed
+	}
+	return room
+}
+
 Extras_Page :: struct {
-	scroll:  ui.Scroll_Rows,
-	toggles: [prefs.MAX_SETTINGS]ui.Text_Button,
-	back:    ui.Text_Button,
-	reset:   ui.Text_Button, // the sliders back to their defaults
+	scroll:   ui.Scroll_Rows,
+	toggles:  [prefs.MAX_SETTINGS]ui.Text_Button,
+	back:     ui.Text_Button,
+	reset:    ui.Text_Button, // the sliders back to their defaults
+	// The browser save, as one file. Laid out and drawn on web only.
+	download: ui.Text_Button,
+	upload:   ui.Text_Button,
 }
 
 // The settings listed: those of the saved mods, dimmed but still there in
@@ -142,9 +164,9 @@ extras_reset_sliders :: proc(ps: ^Prefs_State, listed: []prefs.Setting_ID) {
 // Where the listed setting at `row` sits on the page; false when it is
 // scrolled out of sight.
 @(private = "file")
-extras_row_y :: proc(x: ^Extras_Page, row: int) -> (f32, bool) {
+extras_row_y :: proc(x: ^Extras_Page, row, listed: int) -> (f32, bool) {
 	shown := row - x.scroll.first
-	return EXTRAS_ROW0_Y + f32(shown) * EXTRAS_ROW, shown >= 0 && shown < EXTRAS_ROWS_SHOWN
+	return EXTRAS_ROW0_Y + f32(shown) * EXTRAS_ROW, shown >= 0 && shown < extras_rows_shown(listed)
 }
 
 @(private = "file")
@@ -157,26 +179,38 @@ extras_slider_rect :: proc(y: f32) -> rl.Rectangle {
 extras_page_layout :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State, listed: []prefs.Setting_ID) {
 	settings := prefs.registered_settings()
 	for id, row in listed {
-		y, shown := extras_row_y(x, row)
+		y, shown := extras_row_y(x, row, len(listed))
 		if shown && settings[id].kind == .Toggle {
 			ui.text_button_relabel(r, &x.toggles[id], ps.saved.settings[id] != 0 ? "ON" : "OFF", EXTRAS_VALUE_X, y)
 		}
 	}
 	ui.text_button_relabel(r, &x.back, "BACK", render.SCREEN_W / 2, EXTRAS_BACK_Y)
 	ui.text_button_relabel(r, &x.reset, "RESET SLIDERS", EXTRAS_RESET_X, EXTRAS_BACK_Y)
+	when ODIN_OS == .JS {
+		// Centred, one above the other, on the next row pitches under the
+		// settings and above the note. The screen has no focus cursor: a
+		// click hits them, and Left/Right stay on the sliders.
+		save_y := EXTRAS_ROW0_Y + f32(extras_rows_shown(len(listed))) * EXTRAS_ROW
+		ui.text_button_relabel(r, &x.download, "DOWNLOAD SAVE", render.SCREEN_W / 2, save_y)
+		ui.text_button_relabel(r, &x.upload, "UPLOAD SAVE", render.SCREEN_W / 2, save_y + EXTRAS_ROW)
+	}
 }
 
 // Returns true when the page is left (Back or Escape).
 extras_page_update :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State) -> (leave: bool) {
+	when ODIN_OS == .JS {
+		save_reload_watch()
+		save_take_upload()
+	}
 	buf: [prefs.MAX_SETTINGS]prefs.Setting_ID
 	listed := extras_listed(ps, &buf)
-	ui.scroll_rows_update(&x.scroll, len(listed), EXTRAS_ROWS_SHOWN)
+	ui.scroll_rows_update(&x.scroll, len(listed), extras_rows_shown(len(listed)))
 	extras_page_layout(r, x, ps, listed)
 	mouse := ui.menu_mouse_pos()
 	dt := rl.GetFrameTime()
 	settings := prefs.registered_settings()
 	for id, row in listed {
-		y, shown := extras_row_y(x, row)
+		y, shown := extras_row_y(x, row, len(listed))
 		if !shown {
 			continue
 		}
@@ -206,6 +240,14 @@ extras_page_update :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_Stat
 	if extras_has_sliders(listed) && ui.text_button_update(r, &x.reset, mouse, dt) {
 		extras_reset_sliders(ps, listed)
 	}
+	when ODIN_OS == .JS {
+		if ui.text_button_update(r, &x.download, mouse, dt) {
+			save_download()
+		}
+		if ui.text_button_update(r, &x.upload, mouse, dt) {
+			dr_upload_open()
+		}
+	}
 	return ui.text_button_update(r, &x.back, mouse, dt) || rl.IsKeyPressed(.ESCAPE)
 }
 
@@ -222,7 +264,7 @@ extras_page_draw :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State)
 	ui.menu_draw_text(r, "EXTRAS", render.SCREEN_W / 2, EXTRAS_TITLE_Y, header, .Centre)
 	settings := prefs.registered_settings()
 	for id, row in listed {
-		y, shown := extras_row_y(x, row)
+		y, shown := extras_row_y(x, row, len(listed))
 		if !shown {
 			continue
 		}
@@ -236,7 +278,8 @@ extras_page_draw :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State)
 			ui.hue_slider_draw(ps.saved.settings[id], extras_slider_rect(y), classic)
 		}
 	}
-	ui.scroll_rows_draw(&x.scroll, len(listed), EXTRAS_ROWS_SHOWN, EXTRAS_SCROLL_X, EXTRAS_ROW0_Y, EXTRAS_ROWS_SHOWN * EXTRAS_ROW - 20)
+	shown := extras_rows_shown(len(listed))
+	ui.scroll_rows_draw(&x.scroll, len(listed), shown, EXTRAS_SCROLL_X, EXTRAS_ROW0_Y, f32(shown) * EXTRAS_ROW - 20)
 	saved := sim.mods_resolve(ps.saved.mods)
 	for &pv in ui.registered_settings_previews() {
 		if int(pv.plugin) in saved {
@@ -244,15 +287,28 @@ extras_page_draw :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State)
 		}
 	}
 	note: string
-	switch {
-	case classic:
-		note = "CLASSIC MODE IS ON: MODS ARE OFF UNTIL IT IS TURNED OFF"
-	case len(listed) == 0:
-		note = "NONE OF THE MODS THAT ARE ON HAVE SETTINGS"
-	case:
-		note = "SETTINGS FOR THE MODS THAT ARE ON -- NONE APPLY IN CLASSIC MODE"
+	note_color := dim
+	when ODIN_OS == .JS {
+		if save_note() != "" {
+			note = save_note()
+			note_color = rl.Color{255, 196, 120, 255}
+		}
 	}
-	ui.menu_draw_text(r, note, render.SCREEN_W / 2, EXTRAS_NOTE_Y, dim, .Centre)
+	if note == "" {
+		switch {
+		case classic:
+			note = "CLASSIC MODE IS ON: MODS ARE OFF UNTIL IT IS TURNED OFF"
+		case len(listed) == 0:
+			note = "NONE OF THE MODS THAT ARE ON HAVE SETTINGS"
+		case:
+			note = "SETTINGS FOR THE MODS THAT ARE ON -- NONE APPLY IN CLASSIC MODE"
+		}
+	}
+	when ODIN_OS == .JS {
+		ui.text_button_draw(r, &x.download)
+		ui.text_button_draw(r, &x.upload)
+	}
+	ui.menu_draw_text(r, note, render.SCREEN_W / 2, EXTRAS_NOTE_Y, note_color, .Centre)
 	if extras_has_sliders(listed) {
 		ui.text_button_draw(r, &x.reset)
 	}

@@ -8,7 +8,6 @@ import "core:fmt"
 import rl "vendor:raylib"
 
 import "dr:data"
-import "dr:prefs"
 import "dr:render"
 import "dr:sim"
 
@@ -26,7 +25,10 @@ Web_State :: struct {
 	accumulator: f64,
 	step_dt:     f64,
 	step_hz:     f32,
-	initialized: bool,
+	initialized:   bool,
+	save_note:     [160]u8, // The web save buttons' message, drawn on the Extras page.
+	save_note_len: int,
+	save_reload:   bool,
 }
 
 // Called once at startup. Initializes raylib, loads assets, sets up
@@ -47,8 +49,9 @@ game_init_web :: proc() {
 	sim.plugins_declare(declared)
 	sim.register_all()
 
-	// Default preferences, no saved state on web for now (would need IDBFS)
-	shared.web.ps = Prefs_State{saved = prefs.defaults(), launch = {}, launch_mods = {}}
+	// Preferences, progress and high scores are files under prefs.USER_DATA_DIR_WEB.
+	// The page loads that directory from IndexedDB before main_start.
+	shared.web.ps = prefs_state_load({})
 
 	// Assets bundled with emscripten's --preload-file
 	root := "assets"

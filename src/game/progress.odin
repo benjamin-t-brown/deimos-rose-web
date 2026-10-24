@@ -33,10 +33,6 @@ import "dr:sim"
 // (D53): the original's in "progress", a campaign plugin's in
 // "progress-<plugin name>".
 progress_load :: proc(campaign: sim.Plugin_ID) -> int {
-	when ODIN_OS == .JS {
-		// Web: no file-based persistence yet (could use IDBFS/localStorage)
-		return 1
-	}
 	path := prefs.user_data_path(progress_name(campaign), context.temp_allocator)
 	if path == "" {
 		return 1

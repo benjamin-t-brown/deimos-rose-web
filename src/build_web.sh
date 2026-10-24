@@ -110,7 +110,10 @@ files="$files $ODIN_PATH/vendor/raylib/wasm/libraygui.a"
 #  -sSTACK_SIZE=16MB: JSON records and the startup walk exceed 2MB
 #  --shell-file: use our HTML template
 #  --preload-file: bundle assets and plugin content into the build
-flags="-sEXPORTED_RUNTIME_METHODS=['HEAPF32']"
+# FS and IDBFS are what the page mounts at /persist (IndexedDB). HEAPU8 is
+# how a save file is copied out for download and back in for upload.
+flags="-sEXPORTED_RUNTIME_METHODS=['HEAPF32','HEAPU8','FS','IDBFS']"
+flags="$flags -lidbfs.js"
 flags="$flags -sUSE_GLFW=3"
 flags="$flags -sWARN_ON_UNDEFINED_SYMBOLS=0"
 flags="$flags -sASSERTIONS"

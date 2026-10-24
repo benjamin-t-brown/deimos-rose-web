@@ -149,7 +149,7 @@ no copy of the original. With the original installer in `orig/`,
 The game can be compiled to WebAssembly and run in a browser. This build:
 - Uses a static plugin configuration (all plugins except netplay compiled in)
 - Bundles game assets with Emscripten's `--preload-file`
-- Has no file-based persistence (progress/prefs/highscores are in-memory)
+- Stores progress, preferences and high scores in the browser so they survive a reload
 - Excludes netplay (UDP sockets don't work in browsers)
 
 **Prerequisites:**
@@ -181,7 +181,8 @@ python3 -m http.server 8000
 ```
 
 **Known limitations:**
-- No file persistence (progress, preferences, high scores reset each session)
+- Saves live in this site's browser storage. Another browser, or clearing the site's data, starts fresh. Extras → Download Save writes one file (`deimos-rose-save.drsave`); Upload Save reads that file back, replaces the current save and reloads. A file that is not a save is refused.
+- Closing the page in the moment after a change can drop that change. The browser stores it in the background, and a reload before that finishes sees the previous save.
 - No netplay (browsers don't support UDP)
 - Recovered Levels is not packed into the web build
 - The first launch downloads the packed data (on the order of 180 MB) before the menu appears
