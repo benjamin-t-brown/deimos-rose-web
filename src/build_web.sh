@@ -87,14 +87,33 @@ flags="$flags -sUSE_GLFW=3"
 flags="$flags -sWASM_BIGINT"
 flags="$flags -sWARN_ON_UNDEFINED_SYMBOLS=0"
 flags="$flags -sASSERTIONS"
+# The preloaded data (assets plus plugin content, ~180 MB without Recovered
+# Levels) is copied into wasm memory at startup. 512 MB leaves room for that
+# and the heap; growth covers anything past it. 512 MiB is a multiple of the
+# wasm page size.
 flags="$flags -sALLOW_MEMORY_GROWTH=1"
-flags="$flags -sINITIAL_MEMORY=268435456"  # 256MB
+flags="$flags -sINITIAL_MEMORY=536870912"  # 512MB
 flags="$flags -sSTACK_SIZE=2097152"        # 2MB
 flags="$flags --shell-file game_web/index_template.html"
 
-# Only preload assets if they exist
+# Stage the virtual filesystem outside the output directory, so the copy is
+# not published next to index.html. Recovered Levels is left out: its maps
+# are ~90 MB and the campaign is optional. Netplay is not in this build.
+FS=$(mktemp -d)
+cleanup() { rm -rf "$FS"; }
+trap cleanup EXIT
 if [ -d "assets" ]; then
-	flags="$flags --preload-file assets"
+	cp -a assets "$FS/assets"
+	mkdir -p "$FS/plugins"
+	for dir in plugins/*/; do
+		[ -d "$dir" ] || continue
+		name=$(basename "$dir")
+		case "$name" in
+			recovered_levels|netplay) continue ;;
+		esac
+		cp -a "$dir" "$FS/plugins/$name"
+	done
+	flags="$flags --preload-file $FS/assets@/assets --preload-file $FS/plugins@/plugins"
 else
 	echo "Warning: assets/ not found. The game will not have any content."
 	echo "  Run 'mise run assets:all' to extract assets from the original game."
@@ -106,7 +125,8 @@ fi
 # shellcheck disable=SC2086
 emcc -o "$OUT_DIR/index.html" $files $flags
 
-rm "$OUT_DIR/deimos.wasm.obj"
+rm -f "$OUT_DIR/deimos.wasm.obj"
+touch "$OUT_DIR/.nojekyll"
 
 echo ""
 echo "Web build created in $OUT_DIR"

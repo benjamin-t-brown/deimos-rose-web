@@ -47,6 +47,18 @@
 
   "changes": [
     {
+      "id": "web-build",
+      "title": "Play in a browser",
+      "date": "2026-10-24",
+      "kind": "engineering",
+      "pr": 1,
+      "summary": "The game builds to WebAssembly and can be published to GitHub Pages for a test. Netplay is not in that build, and progress, preferences and high scores last only for the browser session.",
+      "highlights": [
+        "A push of a web branch publishes the build to GitHub Pages, replacing the documentation site until that site is deployed again.",
+        "The original twelve sectors are included. Recovered Levels is not, to keep the download smaller."
+      ]
+    },
+    {
       "id": "readme-website",
       "title": "A README that says what this is",
       "date": "2026-10-18",

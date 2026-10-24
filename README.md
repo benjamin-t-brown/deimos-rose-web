@@ -179,7 +179,23 @@ python3 -m http.server 8000
 **Known limitations:**
 - No file persistence (progress, preferences, high scores reset each session)
 - No netplay (browsers don't support UDP)
-- First launch may take 10-15 seconds to download and decompress assets
+- Recovered Levels is not packed into the web build
+- The first launch downloads the packed data (on the order of 180 MB) before the menu appears
+- A browser may stay silent until the page has been clicked
+
+### GitHub Pages test
+
+`.github/workflows/web-build.yml` builds the browser game. A push of a
+`cursor/web-*` branch, or a manual run of that workflow, publishes the
+result to GitHub Pages.
+
+Pages must be set to deploy from **GitHub Actions** (Settings → Pages).
+The game then replaces the whole Pages site — the documentation site
+included — until that site's own workflow deploys again. For this
+repository the test URL is
+[benjamin-t-brown.github.io/deimos-rose-web](https://benjamin-t-brown.github.io/deimos-rose-web/).
+
+The published site has to stay under GitHub's 1 GB Pages limit.
 
 ## Related work
 

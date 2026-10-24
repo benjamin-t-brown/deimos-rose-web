@@ -1,11 +1,20 @@
 name: Web Build
 
-# Build the web version (WASM) on every push to main or web-related branches.
-# Optionally deploy to GitHub Pages (when enabled).
+# Builds the browser game and, on a push of a cursor/web-* branch (or a
+# manual run), publishes it to GitHub Pages.
+#
+# That publication replaces the whole Pages site. The documentation site
+# (.github/workflows/site.yml) deploys to the same place after Build
+# finishes on main, and whichever ran last is what the URL serves. This
+# workflow is the test deploy of the game.
+#
+# Pages has to be set to "GitHub Actions" in the repository settings
+# (Settings → Pages → Build and deployment → Source). The published site
+# must stay under 1 GB (docs.github.com/pages/getting-started-with-github-pages/github-pages-limits).
 
 on:
   push:
-    branches: ['main', 'cursor/web-*']
+    branches: ['cursor/web-*']
   pull_request:
     paths:
       - 'src/game_web/**'
@@ -14,6 +23,12 @@ on:
       - 'src/build_web.sh'
       - '.github/workflows/web-build.yml'
   workflow_dispatch:
+
+# A newer push of the same branch replaces a deploy that has not finished.
+# A separate group from site.yml, so the two do not cancel each other.
+concurrency:
+  group: web-pages-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   MISE_DISABLE_TOOLS: java
@@ -29,7 +44,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Odin via mise
       - name: Pin Odin for this run only
         run: printf '[tools]\nodin = "dev-2026-09"\n' > mise.local.toml
 
@@ -39,57 +53,50 @@ jobs:
 
       - run: odin version
 
-      # Emscripten SDK
+      # libraylib.web.a ships as LLVM bitcode inside Odin. emcc has to be
+      # near the Emscripten that produced it; `latest` tracks that better
+      # than a pin from before this Odin.
       - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
-          version: '3.1.51'
+          version: latest
           actions-cache-folder: 'emsdk-cache'
 
       - name: Verify emcc
         run: emcc --version
 
-      # Build web version
       - name: Build for web
         run: bash build_web.sh
 
-      # Create artifact
-      - name: Package web build
+      - name: List the web build
         run: |
-          cd build/web
-          tar -czf ../../deimos-web.tar.gz .
+          find build/web -type f -printf '%s\t%p\n' | sort -n
+          du -sh build/web
 
       - uses: actions/upload-artifact@v4
         with:
           name: deimos-web
-          path: src/deimos-web.tar.gz
+          path: src/build/web
           if-no-files-found: error
 
-  # Optional: Deploy to GitHub Pages
-  # Uncomment this job and enable Pages in repository settings to deploy
-  # deploy-pages:
-  #   needs: build-web
-  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     pages: write
-  #     id-token: write
-  #   environment:
-  #     name: github-pages
-  #     url: ${{ steps.deployment.outputs.page_url }}
-  #   steps:
-  #     - uses: actions/download-artifact@v4
-  #       with:
-  #         name: deimos-web
-  #
-  #     - name: Extract web build
-  #       run: |
-  #         mkdir pages
-  #         tar -xzf deimos-web.tar.gz -C pages
-  #
-  #     - uses: actions/upload-pages-artifact@v3
-  #       with:
-  #         path: pages
-  #
-  #     - uses: actions/deploy-pages@v4
-  #       id: deployment
+      # The Pages artifact is uploaded on the builds that deploy. A pull
+      # request only keeps the downloadable artifact above.
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: src/build/web
+
+  deploy-pages:
+    needs: build-web
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4
