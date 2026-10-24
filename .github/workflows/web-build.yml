@@ -1,0 +1,95 @@
+name: Web Build
+
+# Build the web version (WASM) on every push to main or web-related branches.
+# Optionally deploy to GitHub Pages (when enabled).
+
+on:
+  push:
+    branches: ['main', 'cursor/web-*']
+  pull_request:
+    paths:
+      - 'src/game_web/**'
+      - 'src/all_plugins/**'
+      - 'src/game/web.odin'
+      - 'src/build_web.sh'
+      - '.github/workflows/web-build.yml'
+  workflow_dispatch:
+
+env:
+  MISE_DISABLE_TOOLS: java
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Odin via mise
+      - name: Pin Odin for this run only
+        run: printf '[tools]\nodin = "dev-2026-09"\n' > mise.local.toml
+
+      - uses: jdx/mise-action@v2
+        with:
+          working_directory: src
+
+      - run: odin version
+
+      # Emscripten SDK
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.51'
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Verify emcc
+        run: emcc --version
+
+      # Build web version
+      - name: Build for web
+        run: bash build_web.sh
+
+      # Create artifact
+      - name: Package web build
+        run: |
+          cd build/web
+          tar -czf ../../deimos-web.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deimos-web
+          path: src/deimos-web.tar.gz
+          if-no-files-found: error
+
+  # Optional: Deploy to GitHub Pages
+  # Uncomment this job and enable Pages in repository settings to deploy
+  # deploy-pages:
+  #   needs: build-web
+  #   if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     pages: write
+  #     id-token: write
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
+  #   steps:
+  #     - uses: actions/download-artifact@v4
+  #       with:
+  #         name: deimos-web
+  #
+  #     - name: Extract web build
+  #       run: |
+  #         mkdir pages
+  #         tar -xzf deimos-web.tar.gz -C pages
+  #
+  #     - uses: actions/upload-pages-artifact@v3
+  #       with:
+  #         path: pages
+  #
+  #     - uses: actions/deploy-pages@v4
+  #       id: deployment

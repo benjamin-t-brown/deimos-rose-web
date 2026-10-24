@@ -886,3 +886,7 @@ depends = ["check", "purity", "test"]
 
 [tasks.clean]
 run = "rm -rf $DR_BUILD"
+
+[tasks."build:web"]
+description = "Build the game for web (WASM) with emscripten. Requires Odin and emsdk. Set EMSCRIPTEN_SDK_DIR to point to your emsdk installation, or ensure emcc is in PATH"
+run = "bash build_web.sh ${EMSCRIPTEN_SDK_DIR:-}"

@@ -41,6 +41,11 @@ Plugin_Lib_Problem :: struct {
 // this module's blocks. A name found twice is taken from the first. Call
 // before sim.register_all.
 plugin_libs_load :: proc(roots: []string, allocator := context.allocator) -> (loaded: []string, problems: []Plugin_Lib_Problem) {
+	when ODIN_OS == .JS {
+		// Web build: no dynamic library loading. Plugins are statically linked
+		// (imported in game_web's build, via all_plugins_no_netplay).
+		return nil, nil
+	}
 	names := make([dynamic]string, 0, 16, allocator)
 	bad := make([dynamic]Plugin_Lib_Problem, 0, 0, allocator)
 	dirs := make([dynamic]string, 0, len(roots) + 1, context.temp_allocator)

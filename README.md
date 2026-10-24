@@ -140,6 +140,47 @@ The game's converted data is committed in `src/assets/`, so building needs
 no copy of the original. With the original installer in `orig/`,
 `mise run assets:all` regenerates it.
 
+### Building for web
+
+The game can be compiled to WebAssembly and run in a browser. This build:
+- Uses a static plugin configuration (all plugins except netplay compiled in)
+- Bundles game assets with Emscripten's `--preload-file`
+- Has no file-based persistence (progress/prefs/highscores are in-memory)
+- Excludes netplay (UDP sockets don't work in browsers)
+
+**Prerequisites:**
+- Odin dev-2026-09 or later
+- [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html) (emsdk)
+
+**Build:**
+
+```sh
+cd src
+
+# With emsdk activated in your shell:
+./build_web.sh
+
+# Or point to your emsdk directory:
+./build_web.sh /path/to/emsdk
+
+# Or with mise (if EMSCRIPTEN_SDK_DIR is set):
+mise run build:web
+```
+
+The build produces `build/web/index.html`. **You cannot open it directly** 
+due to browser CORS policy. Instead, serve it locally:
+
+```sh
+cd build/web
+python3 -m http.server 8000
+# Then open http://localhost:8000 in your browser
+```
+
+**Known limitations:**
+- No file persistence (progress, preferences, high scores reset each session)
+- No netplay (browsers don't support UDP)
+- First launch may take 10-15 seconds to download and decompress assets
+
 ## Related work
 
 [adamjvr/Deimos-Rising-Remastered](https://github.com/adamjvr/Deimos-Rising-Remastered)
