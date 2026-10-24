@@ -1,5 +1,9 @@
 # Deimos Rose
 
+This repository is a fork of [Keristero/deimos-rose](https://github.com/Keristero/deimos-rose) so the game can be played in a web browser. The game itself is that project's work.
+
+**Play in the browser: [benjamin-t-brown.github.io/deimos-rose-web](https://benjamin-t-brown.github.io/deimos-rose-web/)**
+
 A rebuild of **Deimos Rising**, Ambrosia Software's 2003 vertical shooter,
 written from the ground up in Odin from a study of the original Windows
 build (1.0.2). It plays the original exactly, and adds everything new as

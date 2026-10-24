@@ -47,6 +47,14 @@
 
   "changes": [
     {
+      "id": "readme-fork",
+      "title": "A fork you can play in the browser",
+      "date": "2026-10-24",
+      "kind": "engineering",
+      "pr": 2,
+      "summary": "The README says this repository is a fork of Keristero/deimos-rose, and links the playable browser build."
+    },
+    {
       "id": "web-build",
       "title": "Play in a browser",
       "date": "2026-10-24",
