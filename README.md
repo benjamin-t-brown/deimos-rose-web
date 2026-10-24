@@ -140,6 +140,72 @@ The game's converted data is committed in `src/assets/`, so building needs
 no copy of the original. With the original installer in `orig/`,
 `mise run assets:all` regenerates it.
 
+### Building for web
+
+The game can be compiled to WebAssembly and run in a browser. This build:
+- Uses a static plugin configuration (all plugins except netplay compiled in)
+- Bundles game assets with Emscripten's `--preload-file`
+- Has no file-based persistence (progress/prefs/highscores are in-memory)
+- Excludes netplay (UDP sockets don't work in browsers)
+
+**Prerequisites:**
+- Odin dev-2026-09 or later
+- [Emscripten SDK](https://emscripten.org/docs/getting_started/downloads.html) (emsdk)
+
+**Build:**
+
+```sh
+cd src
+
+# With emsdk activated in your shell:
+./build_web.sh
+
+# Or point to your emsdk directory:
+./build_web.sh /path/to/emsdk
+
+# Or with mise (if EMSCRIPTEN_SDK_DIR is set):
+mise run build:web
+```
+
+The build produces `build/web/index.html`. **You cannot open it directly** 
+due to browser CORS policy. Instead, serve it locally:
+
+```sh
+cd build/web
+python3 -m http.server 8000
+# Then open http://localhost:8000 in your browser
+```
+
+**Known limitations:**
+- No file persistence (progress, preferences, high scores reset each session)
+- No netplay (browsers don't support UDP)
+- Recovered Levels is not packed into the web build
+- The first launch downloads the packed data (on the order of 180 MB) before the menu appears
+- A browser may stay silent until the page has been clicked
+- Realtime Lighting's shader does not compile under WebGL 1, so that pass does not draw. The level still does
+
+### GitHub Pages test
+
+`.github/workflows/web-build.yml` builds the browser game on a pull
+request and on a push of a `cursor/web-*` branch. A push publishes to
+GitHub Pages only when two things are already true: Pages has a site,
+and the branch is on the `github-pages` environment's deployment list.
+That list is `main` on this repository. A branch outside it is rejected
+before the deploy job can start, so the workflow skips the deploy and
+stays green. The build is still uploaded as the `deimos-web` artifact.
+
+The Actions token cannot create the Pages site or edit that list. Set
+the source once: Settings → Pages → Build and deployment → Source →
+**GitHub Actions**. To publish from a branch other than `main`, add it
+under Settings → Environments → github-pages → Deployment branches.
+
+The game then replaces the whole Pages site — the documentation site
+included — until that site's own workflow deploys again. For this
+repository the test URL is
+[benjamin-t-brown.github.io/deimos-rose-web](https://benjamin-t-brown.github.io/deimos-rose-web/).
+
+The published site has to stay under GitHub's 1 GB Pages limit.
+
 ## Related work
 
 [adamjvr/Deimos-Rising-Remastered](https://github.com/adamjvr/Deimos-Rising-Remastered)

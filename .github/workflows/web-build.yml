@@ -1,0 +1,174 @@
+name: Web Build
+
+# Builds the browser game and, on a push of a cursor/web-* branch (or a
+# manual run), publishes it to GitHub Pages when a Pages site exists.
+#
+# That publication replaces the whole Pages site. The documentation site
+# (.github/workflows/site.yml) deploys to the same place after Build
+# finishes on main, and whichever ran last is what the URL serves. This
+# workflow is the test deploy of the game.
+#
+# Pages has to be set to "GitHub Actions" (Settings → Pages → Source).
+# The github-pages environment also has a deployment branch list; this
+# repository currently allows main only. Naming that environment from any
+# other branch is rejected before the job starts, which fails the
+# workflow. pages-gate checks both and skips the deploy instead. The
+# deimos-web artifact is uploaded either way. The published site must stay
+# under 1 GB
+# (docs.github.com/pages/getting-started-with-github-pages/github-pages-limits).
+
+on:
+  push:
+    branches: ['cursor/web-*']
+  pull_request:
+    paths:
+      - 'src/game_web/**'
+      - 'src/all_plugins/**'
+      - 'src/all_plugins_no_netplay/**'
+      - 'src/web/**'
+      - 'src/data/**'
+      - 'src/third_party/odecs/**'
+      - 'src/game/web.odin'
+      - 'src/build_web.sh'
+      - '.github/workflows/web-build.yml'
+  workflow_dispatch:
+
+# A newer push of the same branch replaces a deploy that has not finished.
+# A separate group from site.yml, so the two do not cancel each other.
+concurrency:
+  group: web-pages-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MISE_DISABLE_TOOLS: java
+
+jobs:
+  build-web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Pin Odin for this run only
+        run: printf '[tools]\nodin = "dev-2026-09"\n' > mise.local.toml
+
+      - uses: jdx/mise-action@v2
+        with:
+          working_directory: src
+
+      - run: odin version
+
+      # libraylib.web.a ships as LLVM bitcode inside Odin. emcc has to be
+      # near the Emscripten that produced it; `latest` tracks that better
+      # than a pin from before this Odin.
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+          actions-cache-folder: 'emsdk-cache'
+
+      - name: Verify emcc
+        run: emcc --version
+
+      - name: Build for web
+        run: bash build_web.sh
+
+      - name: List the web build
+        run: |
+          find build/web -type f -printf '%s\t%p\n' | sort -n
+          du -sh build/web
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deimos-web
+          path: src/build/web
+          if-no-files-found: error
+
+      # The Pages artifact is uploaded on the builds that deploy. A pull
+      # request only keeps the downloadable artifact above.
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
+        with:
+          path: src/build/web
+
+  # Decides without touching the github-pages environment. Requesting
+  # that environment is a deployment, and a branch outside its list fails
+  # the job before any step runs.
+  pages-gate:
+    needs: build-web
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      deploy: ${{ steps.check.outputs.deploy }}
+    steps:
+      - name: See whether this branch may publish
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          gh api "repos/${{ github.repository }}/pages" --jq .html_url >/dev/null
+          pages_status=$?
+          env_json=$(gh api "repos/${{ github.repository }}/environments/github-pages")
+          env_status=$?
+          gh api "repos/${{ github.repository }}/environments/github-pages/deployment-branch-policies" --jq '.branch_policies[].name' > /tmp/branch-policies
+          list_status=$?
+          set -e
+          custom=false
+          protected=false
+          if [ "$env_status" -eq 0 ]; then
+            custom=$(printf '%s' "$env_json" | jq -r 'if .deployment_branch_policy.custom_branch_policies == true then "true" else "false" end')
+            protected=$(printf '%s' "$env_json" | jq -r 'if .deployment_branch_policy.protected_branches == true then "true" else "false" end')
+          fi
+          ref="${GITHUB_REF#refs/heads/}"
+          deploy=false
+          reason=""
+          if [ "$pages_status" -ne 0 ]; then
+            reason="GitHub Pages has no site yet. Settings → Pages → Source → GitHub Actions."
+          elif [ "$env_status" -ne 0 ]; then
+            reason="Could not read the github-pages environment."
+          elif [ "$custom" != "true" ] && [ "$protected" != "true" ]; then
+            deploy=true
+          elif [ "$list_status" -ne 0 ]; then
+            reason="Could not read the github-pages deployment branches."
+          else
+            allowed=false
+            while IFS= read -r name; do
+              [ -z "$name" ] && continue
+              # Right-hand side is a pattern, so a policy of cursor/web-* matches.
+              if [[ "$ref" == $name ]]; then
+                allowed=true
+              fi
+            done < /tmp/branch-policies
+            if [ "$allowed" = true ]; then
+              deploy=true
+            else
+              reason="Branch ${ref} is not on the github-pages deployment branch list (Settings → Environments → github-pages). Allowed: $(paste -sd, /tmp/branch-policies)."
+            fi
+          fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          if [ "$deploy" != true ]; then
+            echo "::warning title=Not publishing to GitHub Pages::$reason The deimos-web artifact is still uploaded."
+          fi
+
+  deploy-pages:
+    needs: [build-web, pages-gate]
+    if: needs.pages-gate.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
+        uses: actions/deploy-pages@v4

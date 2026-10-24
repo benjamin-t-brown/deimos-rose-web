@@ -12,6 +12,7 @@ Shared :: struct {
 	campaigns: [sim.MAX_PLUGINS + 1]sim.Plugin_ID, // flow_campaigns' list
 	mods_order: Mods_Order, // menu_mods.odin
 	axis_was:  [sim.MAX_PLAYERS][prefs.Action][prefs.BINDING_SLOTS]bool, // binding_pressed's last frame
+	web:       Web_State, // web.odin, the browser session
 }
 
 @(private)

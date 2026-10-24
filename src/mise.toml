@@ -279,6 +279,8 @@ run = [
   "odin check blocks $DR_COLL -vet -strict-style -no-entry-point",
   "odin check plugin_entry $DR_COLL -vet -strict-style -no-entry-point",
   "odin check all_plugins $DR_COLL -vet -strict-style -no-entry-point",
+  "odin check all_plugins_no_netplay $DR_COLL -vet -strict-style -no-entry-point",
+  "odin check game_web $DR_COLL -vet -strict-style -no-entry-point",
   "for p in sim/*/ sim/systems/*/; do [ -d $p ] && [ \"$(basename $p)\" != systems ] || continue; odin check $p $DR_COLL -vet -strict-style -no-entry-point || exit 1; done",
   "odin check data $DR_COLL -vet -strict-style -no-entry-point",
   "odin check prefs $DR_COLL -vet -strict-style -no-entry-point",
@@ -315,7 +317,7 @@ run = [
   # Every package again as the other OS CI builds on would see it: a
   # `when ODIN_OS` block or a Linux-only file can leave an import unused
   # only there, which failed the Windows build (CI run 36967083184).
-  "other=windows_amd64; [ \"$OS\" = Windows_NT ] && other=linux_amd64; for p in game blocks plugin_entry all_plugins sim sim/*/ sim/systems/*/ data prefs render ui oracle terrain editor plugins/*/ plugins/*/*/ tools/*/ tests tests/support tests/data_plugins tests/terrain tests/editor; do ls $p/*.odin >/dev/null 2>&1 || continue; e=-no-entry-point; grep -qs '^main ::' $p/*.odin && e=; odin check $p $DR_COLL -vet -strict-style $e -target:$other || exit 1; done",
+  "other=windows_amd64; [ \"$OS\" = Windows_NT ] && other=linux_amd64; for p in game blocks plugin_entry all_plugins all_plugins_no_netplay game_web sim sim/*/ sim/systems/*/ data prefs render ui oracle terrain editor plugins/*/ plugins/*/*/ tools/*/ tests tests/support tests/data_plugins tests/terrain tests/editor; do ls $p/*.odin >/dev/null 2>&1 || continue; e=-no-entry-point; grep -qs '^main ::' $p/*.odin && e=; odin check $p $DR_COLL -vet -strict-style $e -target:$other || exit 1; done",
 ]
 
 [tasks.test]
@@ -886,3 +888,7 @@ depends = ["check", "purity", "test"]
 
 [tasks.clean]
 run = "rm -rf $DR_BUILD"
+
+[tasks."build:web"]
+description = "Build the game for web (WASM) with emscripten. Requires Odin and emsdk. Set EMSCRIPTEN_SDK_DIR to point to your emsdk installation, or ensure emcc is in PATH"
+run = "bash build_web.sh ${EMSCRIPTEN_SDK_DIR:-}"

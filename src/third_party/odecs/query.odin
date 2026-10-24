@@ -48,14 +48,28 @@ encode_term :: proc(t: Term) -> typeid {
         panic("ECS: Too many encoded query terms (max 65536)")
     }
     encoded_terms[idx] = t
-    return transmute(typeid)&encoded_terms[idx]
+    when size_of(rawptr) == size_of(typeid) {
+        return transmute(typeid)&encoded_terms[idx]
+    } else {
+        // wasm32: a typeid is 8 bytes and a pointer is 4, so the pointer
+        // itself cannot be a typeid. Real typeids are zero-extended
+        // pointers. Pack the slot into the high half and tag the low half
+        // with 1, which an aligned type-info pointer never has.
+        return transmute(typeid)(u64(idx) << 32 | 1)
+    }
 }
 
-// Check if a typeid is an encoded term (pointer into our array)
+// Check if a typeid is an encoded term (pointer into our array, or the
+// packed slot used where a pointer does not fit in a typeid).
 is_encoded :: proc(t: typeid) -> bool {
-    ptr := transmute(uintptr)t
-    base := uintptr(&encoded_terms[0])
-    return ptr >= base && ptr < base + size_of(encoded_terms)
+    when size_of(rawptr) == size_of(typeid) {
+        ptr := transmute(uintptr)t
+        base := uintptr(&encoded_terms[0])
+        return ptr >= base && ptr < base + size_of(encoded_terms)
+    } else {
+        bits := transmute(u64)t
+        return (bits & 0xffff_ffff) == 1 && (bits >> 32) < MAX_ENCODED_TERMS
+    }
 }
 
 // Decode a typeid back to a Term
@@ -63,7 +77,11 @@ decode_term :: proc(t: typeid) -> Term {
     if !is_encoded(t) {
         return term_from_typeid(t)
     }
-    return (transmute(^Term)t)^
+    when size_of(rawptr) == size_of(typeid) {
+        return (transmute(^Term)t)^
+    } else {
+        return encoded_terms[uint(transmute(u64)t >> 32)]
+    }
 }
 
 // Convert []typeid to []Term for internal use

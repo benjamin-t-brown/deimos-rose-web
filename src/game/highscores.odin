@@ -79,6 +79,13 @@ High_Scores_Save :: struct {
 // the level's name: those hold its identifier ("Lucena" for Mariner
 // Valley), and read as the name.
 high_scores_load :: proc(levels: []sim.Level_Def) -> High_Scores_Save {
+	when ODIN_OS == .JS {
+		// Web: no file-based persistence yet
+		return {
+			table = high_scores_default(),
+			last_name_player = {high_scores_default_last_name(0), high_scores_default_last_name(1)},
+		}
+	}
 	fallback := High_Scores_Save {
 		table            = high_scores_default(),
 		last_name_player = {high_scores_default_last_name(0), high_scores_default_last_name(1)},
@@ -115,6 +122,10 @@ high_scores_load :: proc(levels: []sim.Level_Def) -> High_Scores_Save {
 }
 
 high_scores_save :: proc(save: ^High_Scores_Save) {
+	when ODIN_OS == .JS {
+		// Web: no file-based persistence yet
+		return
+	}
 	sb := strings.builder_make(context.temp_allocator)
 	for e in save.table {
 		fmt.sbprintf(&sb, "%d\n%s\n%s\n", e.score, e.name, e.sector)
