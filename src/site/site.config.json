@@ -51,7 +51,7 @@
       "title": "The website is the game",
       "date": "2026-10-24",
       "kind": "engineering",
-      "pr": null,
+      "pr": 3,
       "summary": "A push to main publishes the browser game to this repository's GitHub Pages. The documentation site is no longer deployed there, so it cannot replace the game."
     },
     {
