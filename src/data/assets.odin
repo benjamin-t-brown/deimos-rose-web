@@ -325,7 +325,7 @@ texture_packs_find :: proc(allocator := context.allocator) -> []Texture_Pack {
 		}
 		pack := Texture_Pack{plugin = sim.Plugin_ID(i), scale = i32(m.texture_scale), files = make(map[string]string, allocator)}
 		for sub in TEXTURE_PACK_DIRS {
-			paths, err := filepath.glob(strings.concatenate({dir, "/textures/", sub, "/*.png"}, context.temp_allocator), context.temp_allocator)
+			paths, err := glob_paths(strings.concatenate({dir, "/textures/", sub, "/*.png"}, context.temp_allocator), context.temp_allocator)
 			if err != nil {
 				continue
 			}
@@ -361,11 +361,53 @@ tags_from :: proc(fields: []Json_Field, allocator := context.allocator) -> []Tag
 	return out
 }
 
+// `dir/prefix*suffix`, one directory, one star. On js, core:path/filepath's
+// glob is `#+build !js`, so the directory is listed and matched here. Every
+// other target keeps filepath.glob.
+@(private = "file")
+glob_paths :: proc(pattern: string, allocator := context.allocator) -> (matches: []string, err: os.Error) {
+	when ODIN_OS != .JS {
+		return filepath.glob(pattern, allocator)
+	} else {
+		slash := strings.last_index(pattern, "/")
+		if slash < 0 {
+			return nil, .Invalid_Path
+		}
+		dir := pattern[:slash]
+		spec := pattern[slash + 1:]
+		star := strings.index(spec, "*")
+		if star < 0 {
+			return nil, .Pattern_Syntax_Error
+		}
+		prefix, suffix := spec[:star], spec[star + 1:]
+		infos, derr := os.read_all_directory_by_path(dir, context.temp_allocator)
+		if derr != nil {
+			return nil, derr
+		}
+		out := make([dynamic]string, 0, len(infos), allocator)
+		for info in infos {
+			if info.type == .Directory {
+				continue
+			}
+			name := info.name
+			if len(name) < len(prefix) + len(suffix) {
+				continue
+			}
+			if !strings.has_prefix(name, prefix) || !strings.has_suffix(name, suffix) {
+				continue
+			}
+			append(&out, strings.concatenate({dir, "/", name}, allocator))
+		}
+		slice.sort(out[:])
+		return out[:], nil
+	}
+}
+
 // Every `<root>/data/<type>/*.json`, sorted by name so the order is stable.
 @(private = "file")
 record_paths :: proc(root, type: string, allocator := context.allocator) -> []string {
 	pattern := strings.concatenate({root, "/data/", type, "/*.json"}, context.temp_allocator)
-	matches, err := filepath.glob(pattern, allocator)
+	matches, err := glob_paths(pattern, allocator)
 	if err != nil {
 		return nil
 	}
@@ -451,7 +493,7 @@ assets_open :: proc(root: string, allocator := context.allocator) -> (a: Assets)
 	// sound effect as well would only waste ~10 MB.
 	exclude["inmu"] = true
 	sounds := make([dynamic]string, 0, 99, allocator)
-	if paths, err := filepath.glob(strings.concatenate({root, "/audio/*.wav"}, context.temp_allocator),
+	if paths, err := glob_paths(strings.concatenate({root, "/audio/*.wav"}, context.temp_allocator),
 		context.temp_allocator); err == nil {
 		for path in paths {
 			base := filepath.base(path)
@@ -802,7 +844,7 @@ AUDIO_EXTENSIONS :: [?]string{".wav", ".ogg", ".mp3"}
 // `<id><core_ext>` for (`ext` if not given), into `media` by id. The first
 // plugin with an id keeps it.
 plugin_media_add :: proc(media: ^map[string]string, root, sub, dir, ext: string, core_ext := "", allocator := context.allocator) {
-	paths, err := filepath.glob(strings.concatenate({dir, sub, "*", ext}, context.temp_allocator), context.temp_allocator)
+	paths, err := glob_paths(strings.concatenate({dir, sub, "*", ext}, context.temp_allocator), context.temp_allocator)
 	if err != nil {
 		return
 	}
@@ -992,7 +1034,20 @@ assets_defs_load_rest :: proc(root: string, defs: ^sim.Defs, report: ^Defs_Repor
 media_mask_from_png :: proc(path: string, allocator := context.allocator) -> (px: []u16, w, h: int, ok: bool) {
 	// png.destroy frees through the context allocator, so the image is loaded
 	// with it rather than from a temporary arena.
-	img, err := png.load_from_file(path)
+	// core:image's load_from_file is compiled out on js (it is `#+build !js`).
+	// The bytes are the same either way: read them and decode.
+	img: ^png.Image
+	err: png.Error
+	when ODIN_OS == .JS {
+		data, rerr := os.read_entire_file(path, context.allocator)
+		if rerr != nil {
+			return nil, 0, 0, false
+		}
+		defer delete(data, context.allocator)
+		img, err = png.load_from_bytes(data)
+	} else {
+		img, err = png.load_from_file(path)
+	}
 	if err != nil {
 		return nil, 0, 0, false
 	}

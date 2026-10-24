@@ -3,19 +3,18 @@ package game
 // Web entry points: initialization, per-frame update, and shutdown.
 // Called from game_web/main_web.odin's exports, which JavaScript invokes.
 
+import "core:c"
 import "core:fmt"
-import "core:mem"
-import "core:os"
 import rl "vendor:raylib"
 
 import "dr:data"
 import "dr:prefs"
 import "dr:render"
 import "dr:sim"
-import "dr:sim/lifecycle"
 
-// Web-specific state that persists between updates
-@(private="file")
+// The browser session. It lives on Shared: a package-level variable would
+// be a plugin's own copy (purity, decisions.md D83).
+@(private)
 Web_State :: struct {
 	flow:        Flow,
 	renderer:    render.Renderer,
@@ -30,9 +29,6 @@ Web_State :: struct {
 	initialized: bool,
 }
 
-@(private="file")
-web_state: Web_State
-
 // Called once at startup. Initializes raylib, loads assets, sets up
 // the renderer and game state.
 game_init_web :: proc() {
@@ -41,20 +37,26 @@ game_init_web :: proc() {
 		return
 	}
 
-	// Static plugins: no library loading on web. sim.register_all() will
-	// register what was imported (all_plugins_no_netplay).
+	// Code plugins are linked in (all_plugins_no_netplay). Folders with a
+	// plugin.json and no code, Classic Levels among them, are found on the
+	// preloaded filesystem.
+	declared, problems := data.plugins_discover(data.plugins_roots())
+	for p in problems {
+		fmt.eprintfln("plugins: %s: %s", p.dir, p.reason)
+	}
+	sim.plugins_declare(declared)
 	sim.register_all()
 
 	// Default preferences, no saved state on web for now (would need IDBFS)
-	web_state.ps = Prefs_State{saved = prefs.defaults(), launch = {}, launch_mods = {}}
+	shared.web.ps = Prefs_State{saved = prefs.defaults(), launch = {}, launch_mods = {}}
 
 	// Assets bundled with emscripten's --preload-file
 	root := "assets"
-	web_state.defs, _ = data.assets_defs_load(root)
-	data.extra_defs_load(&web_state.defs)
+	shared.web.defs, _ = data.assets_defs_load(root)
+	data.extra_defs_load(&shared.web.defs)
 	data.plugins_digest()
 
-	if len(web_state.defs.levels) == 0 {
+	if len(shared.web.defs.levels) == 0 {
 		fmt.eprintfln("no level definitions -- assets missing?")
 		return
 	}
@@ -65,28 +67,28 @@ game_init_web :: proc() {
 	rl.InitAudioDevice()
 
 	// Game data structures
-	web_state.step_hz = web_state.defs.perm_floats[0x20]
-	web_state.step_dt = 1.0 / f64(web_state.step_hz)
+	shared.web.step_hz = shared.web.defs.perm_floats[0x20]
+	shared.web.step_dt = 1.0 / f64(shared.web.step_hz)
 	
-	render.renderer_init(&web_state.renderer, root, false, true)
-	render.effects_init(&web_state.fx)
+	render.renderer_init(&shared.web.renderer, root, false, true)
+	render.effects_init(&shared.web.fx)
 	
-	web_state.state = new(sim.State)
+	shared.web.state = new(sim.State)
 	
 	// Main render canvas
-	web_state.canvas = rl.LoadRenderTexture(render.SCREEN_W * render.WINDOW_SCALE, render.SCREEN_H * render.WINDOW_SCALE)
-	web_state.renderer.canvas = web_state.canvas
+	shared.web.canvas = rl.LoadRenderTexture(render.SCREEN_W * render.WINDOW_SCALE, render.SCREEN_H * render.WINDOW_SCALE)
+	shared.web.renderer.canvas = shared.web.canvas
 
 	// Flow state machine
-	flow_init(&web_state.flow, root, &web_state.defs, web_state.state, &web_state.renderer, &web_state.ps)
-	if !flow_launch(&web_state.flow, {}) {
+	flow_init(&shared.web.flow, root, &shared.web.defs, shared.web.state, &shared.web.renderer, &shared.web.ps)
+	if !flow_launch(&shared.web.flow, {}) {
 		fmt.eprintln("flow_launch failed")
 		return
 	}
 
 	rl.SetExitKey(.KEY_NULL) // Escape is pause, not quit
 
-	web_state.initialized = true
+	shared.web.initialized = true
 	fmt.println("Deimos Rising web initialized")
 }
 
@@ -96,58 +98,58 @@ game_update_web :: proc() -> bool {
 		return false
 	}
 
-	if !web_state.initialized {
+	if !shared.web.initialized {
 		return false
 	}
 
 	// Apply preferences
-	web_state.renderer.classic = false // Web build always in enhanced mode
-	web_state.renderer.textures.mods = prefs_mods(&web_state.ps)
-	web_state.renderer.textures.sfx_volume = f32(web_state.ps.saved.sfx_volume) / 100
-	web_state.renderer.textures.music_volume = f32(web_state.ps.saved.music_volume) / 100
+	shared.web.renderer.classic = false // Web build always in enhanced mode
+	shared.web.renderer.textures.mods = prefs_mods(&shared.web.ps)
+	shared.web.renderer.textures.sfx_volume = f32(shared.web.ps.saved.sfx_volume) / 100
+	shared.web.renderer.textures.music_volume = f32(shared.web.ps.saved.music_volume) / 100
 
 	// Canvas fit in window
-	dst := canvas_fit(web_state.canvas)
+	dst := canvas_fit(shared.web.canvas)
 	rl.SetMouseOffset(-i32(dst.x), -i32(dst.y))
-	rl.SetMouseScale(f32(web_state.renderer.canvas.texture.width) / dst.width, 
-	                 f32(web_state.renderer.canvas.texture.height) / dst.height)
+	rl.SetMouseScale(f32(shared.web.renderer.canvas.texture.width) / dst.width, 
+	                 f32(shared.web.renderer.canvas.texture.height) / dst.height)
 
 	// Input handling
-	flow_handle_input(&web_state.flow, &web_state.renderer)
+	flow_handle_input(&shared.web.flow, &shared.web.renderer)
 
 	// Fixed timestep accumulator
-	web_state.accumulator += f64(rl.GetFrameTime()) * flow_speed(&web_state.flow, &web_state.renderer)
-	for steps := 0; web_state.accumulator >= web_state.step_dt && steps < MAX_STEPS_PER_FRAME; steps += 1 {
-		if flow_held(&web_state.flow, &web_state.renderer) {
-			web_state.accumulator -= web_state.step_dt
+	shared.web.accumulator += f64(rl.GetFrameTime()) * flow_speed(&shared.web.flow, &shared.web.renderer)
+	for steps := 0; shared.web.accumulator >= shared.web.step_dt && steps < MAX_STEPS_PER_FRAME; steps += 1 {
+		if flow_held(&shared.web.flow, &shared.web.renderer) {
+			shared.web.accumulator -= shared.web.step_dt
 			continue
 		}
-		flow_step(&web_state.flow, &web_state.renderer, &web_state.fx)
-		web_state.accumulator -= web_state.step_dt
+		flow_step(&shared.web.flow, &shared.web.renderer, &shared.web.fx)
+		shared.web.accumulator -= shared.web.step_dt
 	}
 
-	flow_music_update(&web_state.flow, &web_state.renderer)
+	flow_music_update(&shared.web.flow, &shared.web.renderer)
 
 	// Render to canvas
-	rl.BeginTextureMode(web_state.renderer.canvas)
+	rl.BeginTextureMode(shared.web.renderer.canvas)
 	rl.ClearBackground(rl.Color{0, 0, 0, 255})
-	flow_draw(&web_state.flow, &web_state.renderer, &web_state.fx, render.WINDOW_SCALE)
+	flow_draw(&shared.web.flow, &shared.web.renderer, &shared.web.fx, render.WINDOW_SCALE)
 	rl.EndTextureMode()
 
 	// Draw canvas to screen
 	rl.BeginDrawing()
 	rl.ClearBackground(rl.Color{0, 0, 0, 255})
-	whole := dst.width == f32(i32(dst.width / f32(web_state.renderer.canvas.texture.width))) * f32(web_state.renderer.canvas.texture.width)
-	rl.SetTextureFilter(web_state.renderer.canvas.texture, whole ? .POINT : .BILINEAR)
-	src := rl.Rectangle{0, 0, f32(web_state.renderer.canvas.texture.width), -f32(web_state.renderer.canvas.texture.height)}
+	whole := dst.width == f32(i32(dst.width / f32(shared.web.renderer.canvas.texture.width))) * f32(shared.web.renderer.canvas.texture.width)
+	rl.SetTextureFilter(shared.web.renderer.canvas.texture, whole ? .POINT : .BILINEAR)
+	src := rl.Rectangle{0, 0, f32(shared.web.renderer.canvas.texture.width), -f32(shared.web.renderer.canvas.texture.height)}
 	rl.BeginBlendMode(.ALPHA_PREMULTIPLY)
-	rl.DrawTexturePro(web_state.renderer.canvas.texture, src, dst, {0, 0}, 0, rl.WHITE)
+	rl.DrawTexturePro(shared.web.renderer.canvas.texture, src, dst, {0, 0}, 0, rl.WHITE)
 	rl.EndBlendMode()
 	rl.EndDrawing()
 
 	free_all(context.temp_allocator)
 
-	return !web_state.flow.quit
+	return !shared.web.flow.quit
 }
 
 // Called on shutdown. Cleans up resources.
@@ -156,22 +158,22 @@ game_shutdown_web :: proc() {
 		return
 	}
 
-	if !web_state.initialized {
+	if !shared.web.initialized {
 		return
 	}
 
-	flow_destroy(&web_state.flow)
-	render.effects_destroy(&web_state.fx)
-	render.renderer_destroy(&web_state.renderer)
-	if web_state.state != nil {
-		sim.destroy(web_state.state)
-		free(web_state.state)
+	flow_destroy(&shared.web.flow)
+	render.effects_destroy(&shared.web.fx)
+	render.renderer_destroy(&shared.web.renderer)
+	if shared.web.state != nil {
+		sim.destroy(shared.web.state)
+		free(shared.web.state)
 	}
-	rl.UnloadRenderTexture(web_state.canvas)
+	rl.UnloadRenderTexture(shared.web.canvas)
 	rl.CloseAudioDevice()
 	rl.CloseWindow()
 
-	web_state.initialized = false
+	shared.web.initialized = false
 	fmt.println("Deimos Rising web shutdown")
 }
 
@@ -180,6 +182,6 @@ game_window_size_changed :: proc(w, h: int) {
 	when ODIN_OS != .JS {
 		return
 	}
-	// On web, raylib automatically handles window resizing through emscripten
-	// Nothing special needed here as canvas_fit() recalculates each frame
+	// The canvas is the window. canvas_fit reads its size each frame.
+	rl.SetWindowSize(c.int(w), c.int(h))
 }

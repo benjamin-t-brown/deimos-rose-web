@@ -19,6 +19,10 @@ on:
     paths:
       - 'src/game_web/**'
       - 'src/all_plugins/**'
+      - 'src/all_plugins_no_netplay/**'
+      - 'src/web/**'
+      - 'src/data/**'
+      - 'src/third_party/odecs/**'
       - 'src/game/web.odin'
       - 'src/build_web.sh'
       - '.github/workflows/web-build.yml'

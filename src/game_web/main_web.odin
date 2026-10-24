@@ -6,7 +6,8 @@ package game_web
 import "base:runtime"
 import "core:c"
 import "core:mem"
-import game ".."
+import "dr:game"
+import _ "dr:all_plugins_no_netplay"
 
 @(private="file")
 web_context: runtime.Context

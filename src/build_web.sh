@@ -47,6 +47,29 @@ echo "Building Deimos Rose for web..."
 echo "  Odin: $(odin version)"
 echo "  emcc: $(emcc --version | head -1)"
 
+# Odin dev-2026-09's core:os panics on js ("unsupported"), and filepath.glob
+# is compiled out there. web/odin_os replaces the panic and the file,
+# directory and stat backends with ones that call web/fs_em.c, which uses
+# emscripten's libc and so sees the preloaded files. The compiler install is
+# restored when this script exits, including on failure.
+ODIN_PATH=$(odin root)
+OS_DIR="$ODIN_PATH/core/os"
+OS_BACKUP=$(mktemp -d)
+OS_FILES="wasm.odin file_js.odin dir_js.odin stat_js.odin"
+for f in $OS_FILES; do
+	cp "$OS_DIR/$f" "$OS_BACKUP/$f"
+	cp "web/odin_os/$f" "$OS_DIR/$f"
+done
+FS=$(mktemp -d)
+cleanup() {
+	rm -rf "$FS"
+	for f in $OS_FILES; do
+		cp "$OS_BACKUP/$f" "$OS_DIR/$f"
+	done
+	rm -rf "$OS_BACKUP"
+}
+trap cleanup EXIT
+
 # Build the static game (all plugins except netplay) to WASM object file.
 # RAYLIB_WASM_LIB=env.o tells vendor:raylib to use env.o (emscripten's
 # internal object), which emcc will populate with the real raylib.
@@ -54,27 +77,24 @@ odin build game_web \
 	-target:js_wasm32 \
 	-build-mode:obj \
 	-collection:dr=. \
-	-import:game_web=game_web \
 	-define:RAYLIB_WASM_LIB=env.o \
 	-define:RAYGUI_WASM_LIB=env.o \
 	-define:DR_VERSION="$(bash tools/version/version.sh)" \
 	-vet -strict-style \
 	-out:"$OUT_DIR/deimos.wasm.obj"
 
-ODIN_PATH=$(odin root)
-
 # Copy odin.js (Odin's WASM runtime) to output
 cp "$ODIN_PATH/core/sys/wasm/js/odin.js" "$OUT_DIR/"
 
-# Files to link: our WASM object, raylib's web build, raygui
+# Files to link: our WASM object, the filesystem helpers, raylib's web build, raygui
 files="$OUT_DIR/deimos.wasm.obj"
+files="$files web/fs_em.c"
 files="$files $ODIN_PATH/vendor/raylib/wasm/libraylib.web.a"
 files="$files $ODIN_PATH/vendor/raylib/wasm/libraygui.a"
 
 # emcc flags:
 #  -sEXPORTED_RUNTIME_METHODS: expose HEAPF32 for Odin
 #  -sUSE_GLFW=3: raylib uses GLFW
-#  -sWASM_BIGINT: enable BigInt support
 #  -sWARN_ON_UNDEFINED_SYMBOLS=0: some Odin symbols stay undefined
 #  -sASSERTIONS: helpful error messages
 #  -sALLOW_MEMORY_GROWTH=1: let memory grow past the initial heap
@@ -84,7 +104,6 @@ files="$files $ODIN_PATH/vendor/raylib/wasm/libraygui.a"
 #  --preload-file: bundle assets and plugin content into the build
 flags="-sEXPORTED_RUNTIME_METHODS=['HEAPF32']"
 flags="$flags -sUSE_GLFW=3"
-flags="$flags -sWASM_BIGINT"
 flags="$flags -sWARN_ON_UNDEFINED_SYMBOLS=0"
 flags="$flags -sASSERTIONS"
 # The preloaded data (assets plus plugin content, ~180 MB without Recovered
@@ -99,9 +118,6 @@ flags="$flags --shell-file game_web/index_template.html"
 # Stage the virtual filesystem outside the output directory, so the copy is
 # not published next to index.html. Recovered Levels is left out: its maps
 # are ~90 MB and the campaign is optional. Netplay is not in this build.
-FS=$(mktemp -d)
-cleanup() { rm -rf "$FS"; }
-trap cleanup EXIT
 if [ -d "assets" ]; then
 	cp -a assets "$FS/assets"
 	mkdir -p "$FS/plugins"

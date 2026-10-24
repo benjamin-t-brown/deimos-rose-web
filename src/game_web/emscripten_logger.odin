@@ -1,64 +1,34 @@
-// Logger that prints through emscripten's console.log.
-// Copied from karl-zylinski/odin-raylib-web.
+// Prints through emscripten's puts, which shows up in the browser console.
+// Adapted from karl-zylinski/odin-raylib-web.
 
 package game_web
 
-import "base:runtime"
 import "core:c"
 import "core:fmt"
 import "core:log"
+import "core:strings"
 
-foreign import "env"
-
-foreign env {
-	@(link_name="emscripten_console_log")
-	emscripten_console_log :: proc "c" (str: cstring) ---
+@(default_calling_convention = "c")
+foreign {
+	puts :: proc(buffer: cstring) -> c.int ---
 }
 
-create_emscripten_logger :: proc(
-	lowest := log.Level.Debug,
-	opt: log.Options = log.DEFAULT_CONSOLE_LOGGER_OPTS,
-	ident := "",
-	allocator := context.allocator,
-) -> log.Logger {
-	return log.Logger {
-		procedure = emscripten_logger_proc,
-		lowest_level = lowest,
-		options = opt,
-	}
+create_emscripten_logger :: proc(lowest := log.Level.Debug, opt := log.Options{.Level}) -> log.Logger {
+	return log.Logger{data = nil, procedure = logger_proc, lowest_level = lowest, options = opt}
 }
 
-emscripten_logger_proc :: proc(
+@(private = "file")
+logger_proc :: proc(
 	logger_data: rawptr,
 	level: log.Level,
 	text: string,
 	options: log.Options,
 	location := #caller_location,
 ) {
-	backing: [1024]byte
-	buf: []byte = backing[:]
-	str: string
-
-	if .Level in options {
-		prefix: string
-		switch level {
-		case .Debug:   prefix = "[DEBUG]   "
-		case .Info:    prefix = "[INFO]    "
-		case .Warning: prefix = "[WARNING] "
-		case .Error:   prefix = "[ERROR]   "
-		case .Fatal:   prefix = "[FATAL]   "
-		}
-		str = fmt.bprintf(buf, "%s%s", prefix, text)
-	} else {
-		str = fmt.bprintf(buf, "%s", text)
+	_, _, _ = logger_data, options, location
+	b := strings.builder_make(context.temp_allocator)
+	fmt.sbprintf(&b, "[%v] %s", level, text)
+	if bc, bc_err := strings.to_cstring(&b); bc_err == nil {
+		_ = puts(bc)
 	}
-
-	// Ensure null termination
-	if len(str) < len(buf) {
-		buf[len(str)] = 0
-	} else {
-		buf[len(buf)-1] = 0
-	}
-
-	emscripten_console_log(cstring(raw_data(buf)))
 }
