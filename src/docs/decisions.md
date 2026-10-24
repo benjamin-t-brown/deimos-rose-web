@@ -2331,3 +2331,22 @@ whole of it. `web-build.yml` publishes the browser build on a push to
 generates the documentation site after Build, and uploads it as an
 artifact. It does not deploy. Putting the docs back on Pages would
 replace the game.
+
+### D89 — Browser saves are the desktop files, in IndexedDB
+
+2026-10-24. The web build used to keep progress, preferences and high
+scores in memory, so a reload looked like a fresh install. Those are
+already files (`prefs.user_data_write`: `preferences`, `highscores`,
+`progress`, `progress-<plugin>`). On web the directory is
+`/persist/deimos-rising`. The page mounts `/persist` as IDBFS and loads
+it before `main_start`; each write asks the page to copy the mount back
+to IndexedDB. Desktop paths are untouched.
+
+The Extras page, on web only, downloads that directory as one file and
+uploads one back. The file is text-headed and then length-prefixed
+payloads (`deimos-rose-save 1`, then a count, then each name, byte
+length and bytes). A name is a single path segment of letters, digits,
+`.`, `_` and `-`. Anything else is refused before a file is written,
+and a good upload reloads only after IndexedDB has accepted the copy.
+An empty list is a valid file and clears the directory; Download Save
+does not offer one when the directory is empty.

@@ -94,10 +94,13 @@ setting_set :: proc(ps: ^Prefs_State, id: prefs.Setting_ID, v: int) {
 @(private = "file") EXTRAS_RESET_X :: 510
 
 Extras_Page :: struct {
-	scroll:  ui.Scroll_Rows,
-	toggles: [prefs.MAX_SETTINGS]ui.Text_Button,
-	back:    ui.Text_Button,
-	reset:   ui.Text_Button, // the sliders back to their defaults
+	scroll:   ui.Scroll_Rows,
+	toggles:  [prefs.MAX_SETTINGS]ui.Text_Button,
+	back:     ui.Text_Button,
+	reset:    ui.Text_Button, // the sliders back to their defaults
+	// The browser save, as one file. Laid out and drawn on web only.
+	download: ui.Text_Button,
+	upload:   ui.Text_Button,
 }
 
 // The settings listed: those of the saved mods, dimmed but still there in
@@ -164,10 +167,19 @@ extras_page_layout :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_Stat
 	}
 	ui.text_button_relabel(r, &x.back, "BACK", render.SCREEN_W / 2, EXTRAS_BACK_Y)
 	ui.text_button_relabel(r, &x.reset, "RESET SLIDERS", EXTRAS_RESET_X, EXTRAS_BACK_Y)
+	when ODIN_OS == .JS {
+		// Same row as the title, clear of it. Desktop has no save file to move.
+		ui.text_button_relabel(r, &x.download, "DOWNLOAD SAVE", 130, EXTRAS_TITLE_Y)
+		ui.text_button_relabel(r, &x.upload, "UPLOAD SAVE", 510, EXTRAS_TITLE_Y)
+	}
 }
 
 // Returns true when the page is left (Back or Escape).
 extras_page_update :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State) -> (leave: bool) {
+	when ODIN_OS == .JS {
+		save_reload_watch()
+		save_take_upload()
+	}
 	buf: [prefs.MAX_SETTINGS]prefs.Setting_ID
 	listed := extras_listed(ps, &buf)
 	ui.scroll_rows_update(&x.scroll, len(listed), EXTRAS_ROWS_SHOWN)
@@ -206,6 +218,14 @@ extras_page_update :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_Stat
 	if extras_has_sliders(listed) && ui.text_button_update(r, &x.reset, mouse, dt) {
 		extras_reset_sliders(ps, listed)
 	}
+	when ODIN_OS == .JS {
+		if ui.text_button_update(r, &x.download, mouse, dt) {
+			save_download()
+		}
+		if ui.text_button_update(r, &x.upload, mouse, dt) {
+			dr_upload_open()
+		}
+	}
 	return ui.text_button_update(r, &x.back, mouse, dt) || rl.IsKeyPressed(.ESCAPE)
 }
 
@@ -220,6 +240,10 @@ extras_page_draw :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State)
 	classic := prefs_classic(ps)
 
 	ui.menu_draw_text(r, "EXTRAS", render.SCREEN_W / 2, EXTRAS_TITLE_Y, header, .Centre)
+	when ODIN_OS == .JS {
+		ui.text_button_draw(r, &x.download)
+		ui.text_button_draw(r, &x.upload)
+	}
 	settings := prefs.registered_settings()
 	for id, row in listed {
 		y, shown := extras_row_y(x, row)
@@ -244,15 +268,24 @@ extras_page_draw :: proc(r: ^render.Renderer, x: ^Extras_Page, ps: ^Prefs_State)
 		}
 	}
 	note: string
-	switch {
-	case classic:
-		note = "CLASSIC MODE IS ON: MODS ARE OFF UNTIL IT IS TURNED OFF"
-	case len(listed) == 0:
-		note = "NONE OF THE MODS THAT ARE ON HAVE SETTINGS"
-	case:
-		note = "SETTINGS FOR THE MODS THAT ARE ON -- NONE APPLY IN CLASSIC MODE"
+	note_color := dim
+	when ODIN_OS == .JS {
+		if save_note() != "" {
+			note = save_note()
+			note_color = rl.Color{255, 196, 120, 255}
+		}
 	}
-	ui.menu_draw_text(r, note, render.SCREEN_W / 2, EXTRAS_NOTE_Y, dim, .Centre)
+	if note == "" {
+		switch {
+		case classic:
+			note = "CLASSIC MODE IS ON: MODS ARE OFF UNTIL IT IS TURNED OFF"
+		case len(listed) == 0:
+			note = "NONE OF THE MODS THAT ARE ON HAVE SETTINGS"
+		case:
+			note = "SETTINGS FOR THE MODS THAT ARE ON -- NONE APPLY IN CLASSIC MODE"
+		}
+	}
+	ui.menu_draw_text(r, note, render.SCREEN_W / 2, EXTRAS_NOTE_Y, note_color, .Centre)
 	if extras_has_sliders(listed) {
 		ui.text_button_draw(r, &x.reset)
 	}

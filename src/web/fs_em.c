@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <emscripten.h>
 
 /* int64_t, not long: wasm32 long is 32 bits and the Odin side passes i64. */
 void *dr_fopen(const char *path, const char *mode) { return fopen(path, mode); }
@@ -55,4 +56,91 @@ int dr_list_dir(const char *path, char *buf, int buflen) {
 	}
 	closedir(d);
 	return used;
+}
+
+/* Copies the /persist mount into IndexedDB. The page sets Module.drSync. */
+void dr_persist_sync(void) {
+	EM_ASM({ if (typeof Module.drSync === 'function') Module.drSync(false, null); });
+}
+
+void dr_persist_sync_reload(void) {
+	EM_ASM({
+		Module.drPersistFailed = 0;
+		var finish = function(err) {
+			Module.drPersistFailed = err ? 1 : 0;
+			if (!err) location.reload();
+		};
+		if (typeof Module.drSync === 'function') Module.drSync(false, finish);
+		else finish('no sync');
+	});
+}
+
+int dr_persist_failed(void) {
+	return EM_ASM_INT({ return Module.drPersistFailed ? 1 : 0; });
+}
+
+void dr_download(const void *ptr, int n, const char *filename) {
+	EM_ASM({
+		var n = $1;
+		var bytes = new Uint8Array(n);
+		var heap = Module['HEAPU8'];
+		if (n > 0 && heap) bytes.set(heap.subarray($0, $0 + n));
+		Module.drLastSave = bytes;
+		var blob = new Blob([bytes], {type: 'application/octet-stream'});
+		var a = document.createElement('a');
+		a.href = URL.createObjectURL(blob);
+		a.download = UTF8ToString($2);
+		document.body.appendChild(a);
+		a.click();
+		a.remove();
+		setTimeout(function() { URL.revokeObjectURL(a.href); }, 2000);
+	}, ptr, n, filename);
+}
+
+void dr_upload_open(void) {
+	EM_ASM({
+		var input = document.getElementById('dr-upload');
+		if (!input) {
+			input = document.createElement('input');
+			input.type = 'file';
+			input.id = 'dr-upload';
+			input.style.display = 'none';
+			input.addEventListener('change', function() {
+				var f = input.files && input.files[0];
+				if (!f) return;
+				var reader = new FileReader();
+				reader.onload = function() { Module.drUpload = new Uint8Array(reader.result); };
+				reader.readAsArrayBuffer(f);
+			});
+			document.body.appendChild(input);
+		}
+		input.click();
+	});
+}
+
+int dr_upload_len(void) {
+	return EM_ASM_INT({
+		if (!Module.drUpload) return -1;
+		return Module.drUpload.length;
+	});
+}
+
+int dr_upload_copy(void *dst, int cap) {
+	return EM_ASM_INT({
+		var u = Module.drUpload;
+		if (!u) return -1;
+		var n = u.length;
+		if (n > $1) {
+			Module.drUpload = null;
+			return -2;
+		}
+		var heap = Module['HEAPU8'];
+		if (n > 0 && heap) heap.set(u.subarray(0, n), $0);
+		Module.drUpload = null;
+		return n;
+	}, dst, cap);
+}
+
+int dr_unlink(const char *path) {
+	return remove(path);
 }

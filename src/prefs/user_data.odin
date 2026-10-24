@@ -7,11 +7,21 @@ package prefs
 import "core:os"
 import "core:strings"
 
+// The browser build has no home directory. Saves live on this absolute
+// path, which the page mounts as IDBFS before the game starts (D89).
+when ODIN_OS == .JS {
+	USER_DATA_DIR_WEB :: "/persist/deimos-rising"
+}
+
 // $XDG_DATA_HOME/deimos-rising/<name>, else %APPDATA%\deimos-rising\<name>
 // on Windows (which has no HOME), else ~/.local/share/deimos-rising/<name>.
 // Empty when none of those is set: callers treat that as "no persistence"
 // rather than failing. Shared by progress, high scores, preferences and the editor.
+// On web the directory is USER_DATA_DIR_WEB, always.
 user_data_path :: proc(name: string, allocator := context.allocator) -> string {
+	when ODIN_OS == .JS {
+		return strings.concatenate({USER_DATA_DIR_WEB, "/", name}, allocator)
+	}
 	if dir := os.get_env("XDG_DATA_HOME", allocator); dir != "" {
 		return strings.concatenate({dir, "/deimos-rising/", name}, allocator)
 	}
@@ -36,4 +46,15 @@ user_data_write :: proc(name: string, contents: string) {
 	}
 	os.make_directory_all(path[:strings.last_index(path, "/")])
 	_ = os.write_entire_file(path, transmute([]byte)contents)
+	when ODIN_OS == .JS {
+		// The write is in memory until this copies the mount into IndexedDB.
+		dr_persist_sync()
+	}
+}
+
+when ODIN_OS == .JS {
+	@(default_calling_convention = "c")
+	foreign {
+		dr_persist_sync :: proc() ---
+	}
 }

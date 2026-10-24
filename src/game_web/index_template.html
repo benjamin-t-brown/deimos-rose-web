@@ -142,11 +142,31 @@
 			onRuntimeInitialized: () => {
 				var e = wasmExports;
 
-				// Calls any procedure marked with @init
-				e._start();
-
-				// See game_web/main_web.odin for main_start, main_update and main_end.
-				e.main_start();
+				// IndexedDB copy of /persist. main_start reads saves, so the
+				// load has to finish first. drSync is what the game calls
+				// after it writes. Calls queue: a second syncfs while one
+				// is running is an error in Emscripten.
+				if (!Module.drPersist) Module.drPersist = {pending: 0, error: '', q: [], busy: false};
+				Module.drPersistFailed = 0;
+				Module.drPump = function() {
+					var p = Module.drPersist;
+					if (p.busy || p.q.length === 0) return;
+					var job = p.q.shift();
+					p.busy = true;
+					Module.FS.syncfs(job.populate, function(err) {
+						p.busy = false;
+						p.pending = Math.max(0, p.pending - 1);
+						p.error = err ? String(err) : '';
+						if (err) Module.drPersistFailed = 1;
+						if (job.done) job.done(err);
+						Module.drPump();
+					});
+				};
+				Module.drSync = function(populate, done) {
+					Module.drPersist.pending++;
+					Module.drPersist.q.push({populate: !!populate, done: done});
+					Module.drPump();
+				};
 
 				function send_resize() {
 					var canvas = document.getElementById('canvas');
@@ -157,30 +177,39 @@
 					send_resize();
 				}, true);
 
-				// This can probably be done better: Ideally we'd feed the
-				// initial size to `main_start`. But there seems to be a
-				// race condition. `canvas` doesn't have its correct size yet.
-				send_resize();
+				// A write already calls drSync. This catches a close that
+				// races the one still in flight.
+				window.addEventListener('pagehide', function() {
+					if (typeof Module.drSync === 'function') Module.drSync(false, null);
+				});
 
-				// Hide the loading screen and the footer link. The link would sit
-				// on top of the play field.
-				loadingDiv.style.display = 'none';
-				var info = document.querySelector('.info');
-				if (info) info.style.display = 'none';
-
-				// Runs the "main loop".
-				function do_main_update() {
-					if (!e.main_update()) {
-						e.main_end();
-
-						// Calls procedures marked with @fini
-						e._end();
-						return;
+				function start_game() {
+					// Calls any procedure marked with @init
+					e._start();
+					try { Module.FS.mkdir('/persist/deimos-rising'); } catch (err) {}
+					e.main_start();
+					// The canvas may not have its size yet at the first call.
+					send_resize();
+					loadingDiv.style.display = 'none';
+					var info = document.querySelector('.info');
+					if (info) info.style.display = 'none';
+					function do_main_update() {
+						if (!e.main_update()) {
+							e.main_end();
+							e._end();
+							return;
+						}
+						window.requestAnimationFrame(do_main_update);
 					}
 					window.requestAnimationFrame(do_main_update);
 				}
 
-				window.requestAnimationFrame(do_main_update);
+				try { Module.FS.mkdir('/persist'); } catch (err) {}
+				Module.FS.mount(Module.IDBFS, {}, '/persist');
+				Module.drSync(true, function(err) {
+					if (err) console.error('save load', err);
+					start_game();
+				});
 			},
 			
 			print: (function() {

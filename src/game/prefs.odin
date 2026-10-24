@@ -39,10 +39,6 @@ Prefs_State :: struct {
 }
 
 prefs_state_load :: proc(launch: Settings) -> Prefs_State {
-	when ODIN_OS == .JS {
-		// Web: no file-based persistence yet, return defaults
-		return Prefs_State{saved = prefs.defaults(), launch = launch, launch_mods = prefs.launch_mods(launch.args)}
-	}
 	ps := Prefs_State{saved = prefs.defaults(), launch = launch, launch_mods = prefs.launch_mods(launch.args)}
 	path := prefs.user_data_path("preferences", context.temp_allocator)
 	if path == "" {
@@ -55,10 +51,6 @@ prefs_state_load :: proc(launch: Settings) -> Prefs_State {
 }
 
 prefs_state_save :: proc(ps: ^Prefs_State) {
-	when ODIN_OS == .JS {
-		// Web: no file-based persistence yet
-		return
-	}
 	prefs.user_data_write("preferences", prefs.format(&ps.saved, context.temp_allocator))
 }
 
