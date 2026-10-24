@@ -2321,3 +2321,13 @@ holds a `deimos/` folder, so all of them unzip over the same one.
 - **Same build, or none.** The zips are made from one release folder in
   one CI run; a library from another refuses to load (D85). A player
   updating the game updates the plugins with it.
+
+### D88 — This fork's Pages URL is the game
+
+2026-10-24. The fork exists so the game can be played in a browser.
+GitHub Pages keeps one site per repository, and a deploy replaces the
+whole of it. `web-build.yml` publishes the browser build on a push to
+`main`, which the `github-pages` environment allows. `site.yml` still
+generates the documentation site after Build, and uploads it as an
+artifact. It does not deploy. Putting the docs back on Pages would
+replace the game.

@@ -47,6 +47,14 @@
 
   "changes": [
     {
+      "id": "pages-game",
+      "title": "The website is the game",
+      "date": "2026-10-24",
+      "kind": "engineering",
+      "pr": 3,
+      "summary": "A push to main publishes the browser game to this repository's GitHub Pages. The documentation site is no longer deployed there, so it cannot replace the game."
+    },
+    {
       "id": "readme-fork",
       "title": "A fork you can play in the browser",
       "date": "2026-10-24",

@@ -1,12 +1,11 @@
 name: Web Build
 
-# Builds the browser game and, on a push of a cursor/web-* branch (or a
-# manual run), publishes it to GitHub Pages when a Pages site exists.
+# Builds the browser game. A push to main publishes it to GitHub Pages.
+# That is what this fork's Pages URL serves (D88).
 #
-# That publication replaces the whole Pages site. The documentation site
-# (.github/workflows/site.yml) deploys to the same place after Build
-# finishes on main, and whichever ran last is what the URL serves. This
-# workflow is the test deploy of the game.
+# site.yml builds the documentation site and uploads it as an artifact.
+# It does not deploy. A second Pages deploy would replace this one
+# entirely, so this workflow is the only one that publishes.
 #
 # Pages has to be set to "GitHub Actions" (Settings → Pages → Source).
 # The github-pages environment also has a deployment branch list; this
@@ -19,7 +18,7 @@ name: Web Build
 
 on:
   push:
-    branches: ['cursor/web-*']
+    branches: ['main', 'cursor/web-*']
   pull_request:
     paths:
       - 'src/game_web/**'
@@ -34,7 +33,6 @@ on:
   workflow_dispatch:
 
 # A newer push of the same branch replaces a deploy that has not finished.
-# A separate group from site.yml, so the two do not cancel each other.
 concurrency:
   group: web-pages-${{ github.ref }}
   cancel-in-progress: true

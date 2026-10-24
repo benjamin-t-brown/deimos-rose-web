@@ -1,9 +1,11 @@
 # The website
 
 Generated, never edited. `build.mjs` turns `site.config.json`, the plugin
-folders and the GitHub releases API into three pages, and
-`.github/workflows/site.yml` deploys them to GitHub Pages once Build has
-finished on main. Node 20 or later; nothing to install.
+folders and the GitHub releases API into three pages.
+`.github/workflows/site.yml` builds that site once Build has finished
+on main and uploads it as an artifact. It does not deploy to GitHub
+Pages: on this fork the Pages URL is the playable game, published by
+`web-build.yml` (decisions.md D88). Node 20 or later; nothing to install.
 
 | Task | Does |
 |---|---|
