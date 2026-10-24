@@ -197,8 +197,12 @@ flowchart LR
   B -->|pull request| R{review + CI<br/>+ site:check}
   R -->|owner merges| M[main]
   M --> Rel[release v0.1.N]
-  M --> S[website rebuilt]
+  M --> S[browser game published]
 ```
+
+On this fork a push to `main` publishes the browser game to GitHub Pages
+(`web-build.yml`, D88). The generated documentation site is not deployed
+there.
 
 - **One branch, one purpose.** Name it for what it does, in kebab-case
   (`runtime-plugins`, `fix-level-skip`); the name is also its site entry's

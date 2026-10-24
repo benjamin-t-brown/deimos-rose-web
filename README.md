@@ -188,27 +188,20 @@ python3 -m http.server 8000
 - A browser may stay silent until the page has been clicked
 - Realtime Lighting's shader does not compile under WebGL 1, so that pass does not draw. The level still does
 
-### GitHub Pages test
+### GitHub Pages
 
-`.github/workflows/web-build.yml` builds the browser game on a pull
-request and on a push of a `cursor/web-*` branch. A push publishes to
-GitHub Pages only when two things are already true: Pages has a site,
-and the branch is on the `github-pages` environment's deployment list.
-That list is `main` on this repository. A branch outside it is rejected
-before the deploy job can start, so the workflow skips the deploy and
-stays green. The build is still uploaded as the `deimos-web` artifact.
+A push to `main` builds the browser game and publishes it. That is what
+[benjamin-t-brown.github.io/deimos-rose-web](https://benjamin-t-brown.github.io/deimos-rose-web/)
+serves. The documentation site is built and kept as an artifact; it is
+not deployed, so it cannot replace the game.
 
-The Actions token cannot create the Pages site or edit that list. Set
-the source once: Settings → Pages → Build and deployment → Source →
-**GitHub Actions**. To publish from a branch other than `main`, add it
-under Settings → Environments → github-pages → Deployment branches.
+Pull requests and pushes of a `cursor/web-*` branch still build the
+game and upload the `deimos-web` artifact. They publish only when that
+branch is on the `github-pages` environment's deployment list. On this
+repository that list is `main`.
 
-The game then replaces the whole Pages site — the documentation site
-included — until that site's own workflow deploys again. For this
-repository the test URL is
-[benjamin-t-brown.github.io/deimos-rose-web](https://benjamin-t-brown.github.io/deimos-rose-web/).
-
-The published site has to stay under GitHub's 1 GB Pages limit.
+Pages has to be set to **GitHub Actions** (Settings → Pages → Source).
+The published site has to stay under GitHub's 1 GB limit.
 
 ## Related work
 
