@@ -187,14 +187,17 @@ python3 -m http.server 8000
 ### GitHub Pages test
 
 `.github/workflows/web-build.yml` builds the browser game on a pull
-request and on a push of a `cursor/web-*` branch. A push also publishes
-to GitHub Pages once the repository has a Pages site.
+request and on a push of a `cursor/web-*` branch. A push publishes to
+GitHub Pages only when two things are already true: Pages has a site,
+and the branch is on the `github-pages` environment's deployment list.
+That list is `main` on this repository. A branch outside it is rejected
+before the deploy job can start, so the workflow skips the deploy and
+stays green. The build is still uploaded as the `deimos-web` artifact.
 
-The Actions token cannot create that site. Set it once: Settings →
-Pages → Build and deployment → Source → **GitHub Actions**. Until then
-the deploy job warns and the workflow stays green; the build is still
-uploaded as the `deimos-web` artifact. The next push publishes after
-the setting exists.
+The Actions token cannot create the Pages site or edit that list. Set
+the source once: Settings → Pages → Build and deployment → Source →
+**GitHub Actions**. To publish from a branch other than `main`, add it
+under Settings → Environments → github-pages → Deployment branches.
 
 The game then replaces the whole Pages site — the documentation site
 included — until that site's own workflow deploys again. For this
